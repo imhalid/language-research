@@ -1,4 +1,4 @@
-import type { Chapter, Paragraph } from './domain.types';
+import type { Chapter, Paragraph, Word } from './domain.types';
 
 export interface ChapterTreeNode extends Chapter {
   id: number;
@@ -20,4 +20,22 @@ export interface SentenceSelection {
   text: string;
   startOffset: number;
   endOffset: number;
+}
+
+export interface HighlightToken {
+  key: string;
+  text: string;
+  lemma: string | null;
+  startOffset: number;
+  endOffset: number;
+  isWord: boolean;
+  isHighlighted: boolean;
+  wordId: number | null;
+  translation: string | null;
+}
+
+export interface WordRecord extends Word {
+  id: number;
+  linkedParagraphCount: number;
+  linkedSentenceCount: number;
 }

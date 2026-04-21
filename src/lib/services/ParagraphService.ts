@@ -73,6 +73,8 @@ export class ParagraphService {
       'rw',
       [db.paragraphs, db.sentences, db.occurrences, db.images, db.canvasNodes],
       async () => {
+        const paragraph = await db.paragraphs.get(paragraphId);
+        const chapterId = paragraph?.chapterId ?? null;
         const sentenceIds = (await db.sentences.where('paragraphId').equals(paragraphId).primaryKeys()) as number[];
         const nodeIds = (await db.canvasNodes.toArray())
           .filter(
@@ -85,6 +87,18 @@ export class ParagraphService {
         await db.sentences.where('paragraphId').equals(paragraphId).delete();
         await db.occurrences.where('paragraphId').equals(paragraphId).delete();
         await db.images.where('paragraphId').equals(paragraphId).delete();
+        if (chapterId != null) {
+          const remainingParagraphIds = (await db.paragraphs.where('chapterId').equals(chapterId).primaryKeys()) as number[];
+          const remainingWordIds = new Set(
+            remainingParagraphIds.length === 0
+              ? []
+              : (await db.occurrences.where('paragraphId').anyOf(remainingParagraphIds).toArray()).map((entry) => entry.wordId)
+          );
+          const orphanWordNodeIds = (await db.canvasNodes.where('chapterId').equals(chapterId).toArray())
+            .filter((node) => node.entityType === 'word' && !remainingWordIds.has(node.entityId))
+            .flatMap((node) => (node.id ? [node.id] : []));
+          if (orphanWordNodeIds.length > 0) await db.canvasNodes.bulkDelete(orphanWordNodeIds);
+        }
         if (nodeIds.length > 0) await db.canvasNodes.bulkDelete(nodeIds);
         await db.paragraphs.delete(paragraphId);
       }

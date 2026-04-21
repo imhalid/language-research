@@ -1,19 +1,44 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { buildHighlightedTokens } from '../../lib/utils/highlight';
   import { getSelectionOffsets, resolveSentenceSelection } from '../../lib/utils/parser';
-  import type { SentenceSelection } from '../../types/research.types';
+  import type { HighlightToken, SentenceSelection } from '../../types/research.types';
   import SentenceTooltip from './SentenceTooltip.svelte';
+  import WordPopover from '../word/WordPopover.svelte';
 
   interface Props {
     paragraphId: number;
     content: string;
+    version: number;
     onSplitSentence: (paragraphId: number, selection: SentenceSelection) => void;
+    onLinkWord: (paragraphId: number, token: HighlightToken) => void;
+    onHoverWord: (wordId: number | null) => void;
+    onSelectWord: (wordId: number | null) => void;
   }
 
-  let { paragraphId, content, onSplitSentence }: Props = $props();
+  let {
+    paragraphId,
+    content,
+    version,
+    onSplitSentence,
+    onLinkWord,
+    onHoverWord,
+    onSelectWord
+  }: Props = $props();
 
   let container: HTMLDivElement | null = null;
+  let tokens = $state<HighlightToken[]>([]);
   let tooltip = $state<{ x: number; y: number; selection: SentenceSelection } | null>(null);
+  let popover = $state<{ x: number; y: number; lemma: string; translation: string | null } | null>(null);
+
+  const loadTokens = async (): Promise<void> => {
+    tokens = await buildHighlightedTokens(paragraphId, content);
+  };
+
+  $effect(() => {
+    void version;
+    void loadTokens();
+  });
 
   const closeTooltip = (): void => {
     tooltip = null;
@@ -55,6 +80,22 @@
     };
   };
 
+  const showPopover = (event: MouseEvent, token: HighlightToken): void => {
+    if (!token.isHighlighted || !container || !token.lemma) return;
+
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const base = container.getBoundingClientRect();
+
+    popover = {
+      x: rect.left - base.left + rect.width / 2,
+      y: rect.top - base.top,
+      lemma: token.lemma,
+      translation: token.translation
+    };
+    onHoverWord(token.wordId);
+  };
+
   onMount(() => {
     const handleMouseUp = (): void => queueMicrotask(updateSelection);
     const handleSelectionChange = (): void => {
@@ -73,7 +114,37 @@
 </script>
 
 <div class="text-wrap">
-  <p bind:this={container} class="paragraph-text">{content}</p>
+  <div bind:this={container} class="paragraph-text">
+    {#each tokens as token (token.key)}
+      {#if token.isWord}
+        <span
+          class="token"
+          role="button"
+          tabindex="0"
+          data-highlight={token.isHighlighted}
+          onclick={() => {
+            onLinkWord(paragraphId, token);
+            if (token.wordId) onSelectWord(token.wordId);
+          }}
+          onkeydown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            onLinkWord(paragraphId, token);
+            if (token.wordId) onSelectWord(token.wordId);
+          }}
+          onmouseenter={(event) => showPopover(event, token)}
+          onmouseleave={() => {
+            popover = null;
+            onHoverWord(null);
+          }}
+        >
+          {token.text}
+        </span>
+      {:else}
+        <span>{token.text}</span>
+      {/if}
+    {/each}
+  </div>
 
   {#if tooltip}
     <SentenceTooltip
@@ -90,6 +161,10 @@
       onClose={closeTooltip}
     />
   {/if}
+
+  {#if popover}
+    <WordPopover x={popover.x} y={popover.y} lemma={popover.lemma} translation={popover.translation} />
+  {/if}
 </div>
 
 <style>
@@ -103,5 +178,22 @@
     line-height: 1.55;
     white-space: pre-wrap;
     user-select: text;
+  }
+
+  .token {
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+
+  .token:hover {
+    background: var(--color-highlight);
+  }
+
+  .token[data-highlight='true'] {
+    background: var(--color-highlight);
+  }
+
+  .token[data-highlight='true']:hover {
+    background: var(--color-highlight-hover);
   }
 </style>

@@ -4,12 +4,25 @@
 
   interface Props {
     paragraph: ParagraphRecord;
+    version: number;
     onSaveNotes: (paragraphId: number, notes: string) => void;
     onDelete: (paragraphId: number) => void;
     onSplitSentence: (paragraphId: number, selection: SentenceSelection) => void;
+    onLinkWord: (paragraphId: number, token: import('../../types/research.types').HighlightToken) => void;
+    onHoverWord: (wordId: number | null) => void;
+    onSelectWord: (wordId: number | null) => void;
   }
 
-  let { paragraph, onSaveNotes, onDelete, onSplitSentence }: Props = $props();
+  let {
+    paragraph,
+    version,
+    onSaveNotes,
+    onDelete,
+    onSplitSentence,
+    onLinkWord,
+    onHoverWord,
+    onSelectWord
+  }: Props = $props();
   let draftNotes = $state('');
 
   $effect(() => {
@@ -26,7 +39,15 @@
     <button type="button" class="mono" onclick={() => onDelete(paragraph.id)}>delete</button>
   </div>
 
-  <ParagraphText paragraphId={paragraph.id} content={paragraph.content} {onSplitSentence} />
+  <ParagraphText
+    paragraphId={paragraph.id}
+    content={paragraph.content}
+    {version}
+    {onSplitSentence}
+    {onLinkWord}
+    {onHoverWord}
+    {onSelectWord}
+  />
 
   <label class="field">
     <span class="section-label">Notes</span>
