@@ -1,9 +1,7 @@
 import { db } from '../db';
-import { now, withTimestamps } from '../utils/date';
 import type { CanvasWorkspaceNode } from '../../types/canvas.types';
 import type { CanvasEntityType } from '../../types/domain.types';
-
-const DEFAULT_CHAPTER_TITLE = 'Atlas Terminal';
+import { DEFAULT_ROOT_CHAPTER_TITLE, ensureResearchSeeded } from './ResearchBootstrapService';
 
 export interface CanvasWorkspaceData {
   chapterId: number;
@@ -12,99 +10,6 @@ export interface CanvasWorkspaceData {
 }
 
 const preview = (value: string): string => value.slice(0, 72).trim();
-
-const resolveSelectedChapterId = async (): Promise<number | null> => {
-  const selected = await db.settings.get('selectedChapterId');
-  return typeof selected?.value === 'number' ? selected.value : null;
-};
-
-const createPhaseTwoDemo = async (): Promise<number> =>
-  db.transaction(
-    'rw',
-    [db.chapters, db.paragraphs, db.sentences, db.words, db.canvasNodes, db.settings],
-    async () => {
-      const chapterId = await db.chapters.add(
-        withTimestamps({
-          parentId: null,
-          title: DEFAULT_CHAPTER_TITLE,
-          order: 0
-        })
-      );
-
-      const paragraphA = await db.paragraphs.add(
-        withTimestamps({
-          chapterId,
-          content: 'Manual translation workspace keeps long passages on canvas without breaking context.',
-          notes: ''
-        })
-      );
-      const paragraphB = await db.paragraphs.add(
-        withTimestamps({
-          chapterId,
-          content: 'Linked words and sentence snapshots should stay movable while chapter focus remains stable.',
-          notes: ''
-        })
-      );
-      const sentenceId = await db.sentences.add({
-        paragraphId: paragraphA,
-        content: 'Manual translation workspace keeps long passages on canvas.',
-        startOffset: 0,
-        endOffset: 58,
-        notes: '',
-        createdAt: now()
-      });
-      const wordA = await db.words.add(
-        withTimestamps({
-          lemma: 'context',
-          translation: 'baglam',
-          notes: ''
-        })
-      );
-      const wordB = await db.words.add(
-        withTimestamps({
-          lemma: 'anchor',
-          translation: 'capa',
-          notes: ''
-        })
-      );
-
-      await db.canvasNodes.bulkAdd([
-        { entityType: 'paragraph', entityId: paragraphA, x: -360, y: -180, chapterId },
-        { entityType: 'paragraph', entityId: paragraphB, x: -120, y: 120, chapterId },
-        { entityType: 'sentence', entityId: sentenceId, x: 260, y: -40, chapterId },
-        { entityType: 'word', entityId: wordA, x: 520, y: 210, chapterId },
-        { entityType: 'word', entityId: wordB, x: 120, y: -260, chapterId }
-      ]);
-
-      await db.settings.put({ key: 'selectedChapterId', value: chapterId });
-
-      return chapterId;
-    }
-  );
-
-const ensureWorkspace = async (): Promise<number> => {
-  const chapterCount = await db.chapters.count();
-
-  if (chapterCount === 0) {
-    return createPhaseTwoDemo();
-  }
-
-  const selectedChapterId = await resolveSelectedChapterId();
-
-  if (selectedChapterId != null && (await db.chapters.get(selectedChapterId))) {
-    return selectedChapterId;
-  }
-
-  const firstChapter = await db.chapters.orderBy('order').first();
-
-  if (!firstChapter?.id) {
-    return createPhaseTwoDemo();
-  }
-
-  await db.settings.put({ key: 'selectedChapterId', value: firstChapter.id });
-
-  return firstChapter.id;
-};
 
 const buildNodeMap = <T extends { id?: number }>(
   entries: T[],
@@ -142,14 +47,14 @@ const resolveNodePresentation = async (
 };
 
 export class CanvasWorkspaceService {
-  static async load(): Promise<CanvasWorkspaceData> {
-    const chapterId = await ensureWorkspace();
+  static async load(chapterId?: number): Promise<CanvasWorkspaceData> {
+    const targetChapterId = chapterId ?? (await ensureResearchSeeded());
     const [chapter, nodes, paragraphMap, sentenceMap, wordMap] = await Promise.all([
-      db.chapters.get(chapterId),
-      db.canvasNodes.where('chapterId').equals(chapterId).toArray(),
-      resolveNodePresentation(chapterId, 'paragraph'),
-      resolveNodePresentation(chapterId, 'sentence'),
-      resolveNodePresentation(chapterId, 'word')
+      db.chapters.get(targetChapterId),
+      db.canvasNodes.where('chapterId').equals(targetChapterId).toArray(),
+      resolveNodePresentation(targetChapterId, 'paragraph'),
+      resolveNodePresentation(targetChapterId, 'sentence'),
+      resolveNodePresentation(targetChapterId, 'word')
     ]);
 
     const dictionary = {
@@ -160,8 +65,8 @@ export class CanvasWorkspaceService {
     };
 
     return {
-      chapterId,
-      chapterTitle: chapter?.title ?? DEFAULT_CHAPTER_TITLE,
+      chapterId: targetChapterId,
+      chapterTitle: chapter?.title ?? DEFAULT_ROOT_CHAPTER_TITLE,
       nodes: nodes.flatMap((node) => {
         if (!node.id) return [];
 
