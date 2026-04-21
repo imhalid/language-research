@@ -10,6 +10,7 @@
     onSelect: (id: number) => void;
     onToggle: (id: number) => void;
     onAddChild: (id: number) => void;
+    onDelete: (id: number) => void;
     depth?: number;
   }
 
@@ -20,6 +21,7 @@
     onSelect,
     onToggle,
     onAddChild,
+    onDelete,
     depth = 0
   }: Props = $props();
 </script>
@@ -34,6 +36,7 @@
         {onSelect}
         {onToggle}
         {onAddChild}
+        {onDelete}
       />
 
       {#if chapter.children.length > 0 && expandedIds.includes(chapter.id)}
@@ -44,6 +47,7 @@
           {onSelect}
           {onToggle}
           {onAddChild}
+          {onDelete}
           depth={depth + 1}
         />
       {/if}

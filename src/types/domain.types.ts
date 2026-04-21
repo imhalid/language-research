@@ -60,6 +60,7 @@ export interface Image {
   caption: string;
   notes: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface WordnetEntry {

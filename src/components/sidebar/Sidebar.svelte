@@ -11,6 +11,7 @@
     onToggle: (id: number) => void;
     onAddRoot: () => void;
     onAddChild: (id: number) => void;
+    onDelete: (id: number) => void;
   }
 
   let {
@@ -21,7 +22,8 @@
     onSelect,
     onToggle,
     onAddRoot,
-    onAddChild
+    onAddChild,
+    onDelete
   }: Props = $props();
 </script>
 
@@ -30,7 +32,7 @@
     <div class="title-row">
       <div>
         <div class="eyebrow muted">Language Research App</div>
-        <h1>Faz 3</h1>
+        <h1>Faz 7</h1>
       </div>
       <div class="status-pill"><span class="status-dot live"></span> edit</div>
     </div>
@@ -49,6 +51,7 @@
       {onSelect}
       {onToggle}
       {onAddChild}
+      {onDelete}
     />
   </section>
 </aside>

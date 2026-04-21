@@ -28,6 +28,11 @@ export const canvasMachine = setup({
         zoom: ({ context, event }) => clampZoom(context.zoom + event.delta)
       })
     },
+    SET_ZOOM: {
+      actions: assign({
+        zoom: ({ event }) => clampZoom(event.value)
+      })
+    },
     PAN: {
       actions: assign({
         panX: ({ context, event }) => context.panX + event.dx,

@@ -9,6 +9,7 @@ export interface CanvasContext {
 
 export type CanvasEvent =
   | { type: 'ZOOM'; delta: number }
+  | { type: 'SET_ZOOM'; value: number }
   | { type: 'PAN'; dx: number; dy: number }
   | { type: 'DRAG_START'; nodeId: number; offsetX: number; offsetY: number }
   | { type: 'DRAG_MOVE'; x: number; y: number }

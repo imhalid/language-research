@@ -12,9 +12,10 @@
     onCommit: (nodeId: number, x: number, y: number) => void;
     onEnd: () => void;
     onSelect: (nodeId: number) => void;
+    onContext: (nodeId: number, clientX: number, clientY: number) => void;
   }
 
-  let { node, selected = false, connected = false, toWorldPoint, onStart, onMove, onCommit, onEnd, onSelect }: Props =
+  let { node, selected = false, connected = false, toWorldPoint, onStart, onMove, onCommit, onEnd, onSelect, onContext }: Props =
     $props();
 
   let element: HTMLButtonElement | null = null;
@@ -56,6 +57,13 @@
     element?.releasePointerCapture(event.pointerId);
     dragPointerId = null;
   };
+
+  const openContext = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect(node.id);
+    onContext(node.id, event.clientX, event.clientY);
+  };
 </script>
 
 <button
@@ -72,6 +80,7 @@
   onpointerup={endDrag}
   onpointercancel={endDrag}
   onlostpointercapture={endDrag}
+  oncontextmenu={openContext}
 >
   <span class="node-type">{node.entityType}</span>
   <strong>{node.title}</strong>
@@ -110,6 +119,10 @@
 
   .node[data-entity='word'] {
     background: color-mix(in oklch, var(--color-surface) 86%, oklch(72% 0.1 155));
+  }
+
+  .node[data-entity='image'] {
+    background: color-mix(in oklch, var(--color-surface) 86%, oklch(74% 0.08 45));
   }
 
   .node-type {

@@ -1,4 +1,5 @@
 import type { CanvasWorkspaceNode, Connection } from '../../types/canvas.types';
+import type { CanvasEntityType } from '../../types/domain.types';
 import type { ConnectedEntity, SelectableEntityType } from '../../types/machine.types';
 
 const SELECTABLE_TYPES = new Set<SelectableEntityType>(['paragraph', 'sentence', 'word']);
@@ -16,7 +17,7 @@ export const buildSelectionKey = (
 
 export const findCanvasNodeId = (
   nodes: CanvasWorkspaceNode[],
-  entityType: SelectableEntityType,
+  entityType: CanvasEntityType,
   entityId: number
 ): number | null =>
   nodes.find((node) => node.entityType === entityType && node.entityId === entityId)?.id ?? null;

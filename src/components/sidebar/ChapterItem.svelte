@@ -8,9 +8,10 @@
     onSelect: (id: number) => void;
     onToggle: (id: number) => void;
     onAddChild: (id: number) => void;
+    onDelete: (id: number) => void;
   }
 
-  let { chapter, active, expanded, onSelect, onToggle, onAddChild }: Props = $props();
+  let { chapter, active, expanded, onSelect, onToggle, onAddChild, onDelete }: Props = $props();
 </script>
 
 <div class="chapter-item" data-active={active}>
@@ -19,12 +20,13 @@
   </button>
   <button type="button" class="label" onclick={() => onSelect(chapter.id)}>{chapter.title}</button>
   <button type="button" class="add mono" onclick={() => onAddChild(chapter.id)}>+</button>
+  <button type="button" class="delete mono" onclick={() => onDelete(chapter.id)}>×</button>
 </div>
 
 <style>
   .chapter-item {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) 20px;
+    grid-template-columns: 18px minmax(0, 1fr) 20px 20px;
     align-items: center;
     gap: 6px;
     min-height: 28px;
@@ -36,6 +38,7 @@
   }
 
   .toggle,
+  .delete,
   .add,
   .label {
     min-height: 24px;

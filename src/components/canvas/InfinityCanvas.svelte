@@ -18,6 +18,8 @@
     onCommitNode: (nodeId: number, x: number, y: number) => void;
     onEndNode: () => void;
     onSelectNode: (nodeId: number) => void;
+    onContextNode: (nodeId: number, clientX: number, clientY: number) => void;
+    onContextCanvas: (clientX: number, clientY: number, world: CanvasPoint) => void;
     onResetView: () => void;
   }
 
@@ -34,6 +36,8 @@
     onCommitNode,
     onEndNode,
     onSelectNode,
+    onContextNode,
+    onContextCanvas,
     onResetView
   }: Props = $props();
 
@@ -87,12 +91,19 @@
 
     onZoom(delta, compensation);
   };
+
+  const openCanvasContext = (event: MouseEvent): void => {
+    if (!viewport) return;
+
+    event.preventDefault();
+    onContextCanvas(event.clientX, event.clientY, toWorldPoint(event.clientX, event.clientY));
+  };
 </script>
 
 <section class="panel canvas-panel">
   <div class="canvas-toolbar">
     <div class="canvas-meta">
-      <span class="section-label">Phase 6 Canvas</span>
+      <span class="section-label">Phase 7 Canvas</span>
       <span class="mono muted">{nodes.length} movable entities</span>
     </div>
     <div class="canvas-actions">
@@ -115,6 +126,7 @@
     onpointercancel={endPan}
     onlostpointercapture={endPan}
     onwheel={zoomCanvas}
+    oncontextmenu={openCanvasContext}
   >
     <RopeOverlay {nodes} {connections} {view} />
     <div class="world" style={`transform: translate3d(${view.panX}px, ${view.panY}px, 0) scale(${view.zoom});`}>
@@ -129,6 +141,7 @@
           onCommit={onCommitNode}
           onEnd={onEndNode}
           onSelect={onSelectNode}
+          onContext={onContextNode}
         />
       {/each}
     </div>

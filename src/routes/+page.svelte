@@ -2,8 +2,10 @@
   import { onMount } from 'svelte';
   import { createActor } from 'xstate';
   import InfinityCanvas from '../components/canvas/InfinityCanvas.svelte';
+  import ImageCard from '../components/image/ImageCard.svelte';
   import ParagraphCard from '../components/paragraph/ParagraphCard.svelte';
   import Sidebar from '../components/sidebar/Sidebar.svelte';
+  import ContextMenu from '../components/ui/ContextMenu.svelte';
   import WordCard from '../components/word/WordCard.svelte';
   import WordnetCard from '../components/word/WordnetCard.svelte';
   import { canvasMachine } from '$lib/machines/canvas.machine';
@@ -12,7 +14,10 @@
   import { wordnetMachine } from '$lib/machines/wordnet.machine';
   import { CanvasWorkspaceService, type CanvasWorkspaceData } from '$lib/services/CanvasWorkspaceService';
   import { ChapterService } from '$lib/services/ChapterService';
+  import { ImageService } from '$lib/services/ImageService';
   import { ParagraphService } from '$lib/services/ParagraphService';
+  import { SentenceService } from '$lib/services/SentenceService';
+  import { SettingsService } from '$lib/services/SettingsService';
   import { WordService } from '$lib/services/WordService';
   import { WordnetBootstrapService } from '$lib/services/WordnetBootstrapService';
   import { wordStore } from '$lib/stores/word.store';
@@ -22,15 +27,34 @@
     findCanvasNodeId
   } from '$lib/utils/canvasSelection';
   import type { CanvasPoint, Connection } from '../types/canvas.types';
+  import type { CanvasWorkspaceNode } from '../types/canvas.types';
   import type { WordnetEntry } from '../types/domain.types';
   import type { SelectableEntityType } from '../types/machine.types';
   import type {
     ChapterTreeNode,
+    ContextMenuAction,
     HighlightToken,
+    ImageRecord,
     ParagraphRecord,
     SentenceSelection,
     WordRecord
   } from '../types/research.types';
+
+  interface CanvasContextMenuState {
+    open: boolean;
+    x: number;
+    y: number;
+    nodeId: number | null;
+    world: CanvasPoint | null;
+  }
+
+  const closedContextMenu = (): CanvasContextMenuState => ({
+    open: false,
+    x: 0,
+    y: 0,
+    nodeId: null,
+    world: null
+  });
 
   const canvasActor = createActor(canvasMachine);
   const chapterActor = createActor(chapterMachine);
@@ -44,6 +68,7 @@
   let chapters: ChapterTreeNode[] = [];
   let workspace: CanvasWorkspaceData | null = null;
   let paragraphs: ParagraphRecord[] = [];
+  let images: ImageRecord[] = [];
   let wordState = { words: [] as WordRecord[], selectedWordId: null as number | null, hoveredWordId: null as number | null };
   let wordnetEntry: WordnetEntry | null = null;
   let wordnetLoading = false;
@@ -55,10 +80,21 @@
   let connections: Connection[] = [];
   let connectedNodeIds: number[] = [];
   let selectionKey = '';
+  let imageScopeKey = '';
+  let imageScopeNonce = 0;
+  let imageInput: HTMLInputElement | null = null;
+  let pendingImageParagraphId: number | null = null;
+  let canvasSettingsReady = false;
+  let lastSavedZoom = 1;
+  let contextMenu = closedContextMenu();
   let wordnetLookupKey = '';
   let wordnetLookupNonce = 0;
 
   $: selectedNode = workspace?.nodes.find((node) => node.id === selectedNodeId) ?? workspace?.nodes[0] ?? null;
+  $: contextNode =
+    contextMenu.nodeId != null
+      ? workspace?.nodes.find((node) => node.id === contextMenu.nodeId) ?? null
+      : null;
   $: connections = buildSelectionConnections(
     workspace?.nodes ?? [],
     selectedNode?.id ?? null,
@@ -67,6 +103,32 @@
   $: connectedNodeIds = connections.map((connection) => connection.toNodeId);
   $: selectedWord = wordState.words.find((word) => word.id === wordState.selectedWordId) ?? null;
   $: hoveredWord = wordState.words.find((word) => word.id === wordState.hoveredWordId) ?? null;
+  $: contextMenuItems = (() => {
+    if (!contextMenu.open) return [] as ContextMenuAction[];
+    if (!contextNode) return [{ id: 'add-paragraph-here', label: 'Add paragraph here' }];
+
+    if (contextNode.entityType === 'paragraph') {
+      return [
+        { id: 'upload-image', label: 'Upload image' },
+        { id: 'delete-paragraph', label: 'Delete paragraph', tone: 'danger' as const }
+      ];
+    }
+
+    if (contextNode.entityType === 'sentence') {
+      return [{ id: 'detach-sentence', label: 'Detach sentence', tone: 'danger' as const }];
+    }
+
+    if (contextNode.entityType === 'word') {
+      return [{ id: 'inspect-word', label: 'Focus word card' }];
+    }
+
+    if (contextNode.entityType === 'image') {
+      return [{ id: 'delete-image', label: 'Delete image', tone: 'danger' as const }];
+    }
+
+    return [] as ContextMenuAction[];
+  })();
+  $: contextMenuTitle = contextNode ? contextNode.title : 'Canvas';
   $: {
     const nextKey = buildSelectionKey(workspace?.chapterId, selectedNode);
 
@@ -96,6 +158,23 @@
       void loadWordnetEntry(lookupKey);
     }
   }
+  $: {
+    const nextImageScopeKey =
+      selectedNode?.entityType === 'paragraph'
+        ? `paragraph:${selectedNode.entityId}`
+        : selectedNode?.entityType === 'image'
+          ? `image:${selectedNode.entityId}`
+          : '';
+
+    if (nextImageScopeKey !== imageScopeKey) {
+      imageScopeKey = nextImageScopeKey;
+      void loadImageScope();
+    }
+  }
+  $: if (canvasSettingsReady && view.zoom !== lastSavedZoom) {
+    lastSavedZoom = view.zoom;
+    void SettingsService.set('canvasZoom', view.zoom);
+  }
 
   onMount(() => {
     canvasActor.start();
@@ -107,6 +186,7 @@
     const selectionSub = selectionActor.subscribe((snapshot) => (selectionState = snapshot.context));
     const wordnetSub = wordnetActor.subscribe((snapshot) => (wordnetState = snapshot.context));
     const wordSub = wordStore.subscribe((state) => (wordState = state));
+    void restoreCanvasZoom();
     void refresh();
     void bootWordnet();
 
@@ -132,8 +212,11 @@
     const words = await WordService.listByChapter(chapterId);
     wordStore.setWords(words);
   };
+  const closeContextMenu = (): void => {
+    contextMenu = closedContextMenu();
+  };
   const focusCanvasEntity = (
-    entityType: SelectableEntityType,
+    entityType: CanvasWorkspaceNode['entityType'],
     entityId: number,
     nodes = workspace?.nodes ?? []
   ): void => {
@@ -143,6 +226,12 @@
   const syncWordStoreFromNode = (nodeId: number, nodes = workspace?.nodes ?? []): void => {
     const node = nodes.find((entry) => entry.id === nodeId);
     if (node?.entityType === 'word') wordStore.selectWord(node.entityId);
+  };
+  const restoreCanvasZoom = async (): Promise<void> => {
+    const zoom = await SettingsService.getNumber('canvasZoom', 1);
+    lastSavedZoom = zoom;
+    canvasActor.send({ type: 'SET_ZOOM', value: zoom });
+    canvasSettingsReady = true;
   };
   const bootWordnet = async (): Promise<void> => {
     wordnetActor.send({ type: 'START_SEED' });
@@ -186,9 +275,30 @@
     }
   };
 
+  const loadImageScope = async (): Promise<void> => {
+    const nonce = ++imageScopeNonce;
+    const node = selectedNode;
+    let nextImages: ImageRecord[] = [];
+
+    if (!node) {
+      images = [];
+      return;
+    }
+
+    if (node.entityType === 'paragraph') {
+      nextImages = await ImageService.listByParagraph(node.entityId);
+    } else if (node.entityType === 'image') {
+      const image = await ImageService.get(node.entityId);
+      nextImages = image ? [image] : [];
+    }
+
+    if (nonce === imageScopeNonce) images = nextImages;
+  };
+
   const refresh = async (preferredChapterId?: number): Promise<void> => {
     loading = true;
     error = null;
+    closeContextMenu();
 
     try {
       const treeState = await ChapterService.loadTree(preferredChapterId);
@@ -202,6 +312,11 @@
     }
   };
 
+  const handleDeleteChapter = async (chapterId: number): Promise<void> => {
+    selectedNodeId = null;
+    await refresh(await ChapterService.deleteCascade(chapterId));
+  };
+
   const handleZoom = (delta: number, compensation: CanvasPoint): void => {
     canvasActor.send({ type: 'ZOOM', delta });
     if (compensation.x !== 0 || compensation.y !== 0) {
@@ -213,11 +328,78 @@
     await loadChapter(chapterId);
     highlightVersion += 1;
   };
+  const handleContextAction = async (actionId: string): Promise<void> => {
+    const chapterId = activeChapterId();
+    const node = contextNode;
+    const world = contextMenu.world;
+
+    closeContextMenu();
+
+    if (actionId === 'add-paragraph-here') {
+      if (!chapterId || !world) return;
+      const paragraphId = await ParagraphService.create(
+        chapterId,
+        draftParagraph.trim() || 'New paragraph',
+        world
+      );
+      draftParagraph = '';
+      const nextWorkspace = await loadChapter(chapterId);
+      highlightVersion += 1;
+      focusCanvasEntity('paragraph', paragraphId, nextWorkspace.nodes);
+      return;
+    }
+
+    if (!node || !chapterId) return;
+
+    if (actionId === 'upload-image' && node.entityType === 'paragraph') {
+      pendingImageParagraphId = node.entityId;
+      imageInput?.click();
+      return;
+    }
+
+    if (actionId === 'delete-paragraph' && node.entityType === 'paragraph') {
+      await ParagraphService.delete(node.entityId);
+      await refreshWordSurface(chapterId);
+      return;
+    }
+
+    if (actionId === 'detach-sentence' && node.entityType === 'sentence') {
+      await SentenceService.delete(node.entityId);
+      await refreshWordSurface(chapterId);
+      return;
+    }
+
+    if (actionId === 'inspect-word' && node.entityType === 'word') {
+      wordStore.selectWord(node.entityId);
+      focusCanvasEntity('word', node.entityId);
+      return;
+    }
+
+    if (actionId === 'delete-image' && node.entityType === 'image') {
+      await ImageService.delete(node.entityId);
+      await loadChapter(chapterId);
+    }
+  };
+
+  const handleImageUpload = async (event: Event): Promise<void> => {
+    const chapterId = activeChapterId();
+    const paragraphId = pendingImageParagraphId;
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    pendingImageParagraphId = null;
+
+    if (!chapterId || !paragraphId || !file) return;
+
+    const imageId = await ImageService.create({ chapterId, paragraphId, file });
+    const nextWorkspace = await loadChapter(chapterId);
+    focusCanvasEntity('image', imageId, nextWorkspace.nodes);
+  };
 </script>
 
 <svelte:head>
-  <title>Language Research App | Faz 6</title>
-  <meta name="description" content="Selection graph, rope overlay, connected canvas nodes, and local WordNet previews." />
+  <title>Language Research App | Faz 7</title>
+  <meta name="description" content="Context menus, image blobs, chapter cascade delete, settings persistence, and rope graph overlay." />
 </svelte:head>
 
 <main class="app-shell">
@@ -230,6 +412,7 @@
     onToggle={(id) => chapterActor.send({ type: 'TOGGLE_EXPAND', id })}
     onAddRoot={async () => refresh(await ChapterService.createRoot())}
     onAddChild={async (id) => refresh(await ChapterService.createChild(id))}
+    onDelete={handleDeleteChapter}
   />
 
   <section class="workspace">
@@ -266,6 +449,14 @@
           selectedNodeId = nodeId;
           syncWordStoreFromNode(nodeId);
         }}
+        onContextNode={(nodeId, clientX, clientY) => {
+          selectedNodeId = nodeId;
+          syncWordStoreFromNode(nodeId);
+          contextMenu = { open: true, x: clientX, y: clientY, nodeId, world: null };
+        }}
+        onContextCanvas={(clientX, clientY, world) => {
+          contextMenu = { open: true, x: clientX, y: clientY, nodeId: null, world };
+        }}
         onResetView={() => canvasActor.send({ type: 'RESET_VIEW' })}
       />
     {/if}
@@ -284,7 +475,7 @@
           draftParagraph = '';
           await refreshWordSurface(chapterId);
         }}>add paragraph</button>
-      <p class="summary">{hoveredWord ? `${hoveredWord.lemma} -> ${hoveredWord.translation || 'translation pending'}` : selectedNode ? `${selectedNode.title} / ${selectedNode.entityType}` : 'Click token to create word bridge. Hover highlighted token for popover.'}</p>
+      <p class="summary">{hoveredWord ? `${hoveredWord.lemma} -> ${hoveredWord.translation || 'translation pending'}` : selectedNode ? `${selectedNode.title} / ${selectedNode.entityType}` : 'Right click canvas for quick actions. Hover highlighted token for popover.'}</p>
     </section>
 
     <div class="paragraph-list">
@@ -334,6 +525,41 @@
     </div>
 
     <section class="panel stack">
+      <div class="section-row"><h2 class="workspace-title">Images</h2><span class="section-label">{images.length}</span></div>
+      {#if images.length === 0}
+        <p class="summary">Select paragraph or image node. Right click paragraph node to upload image.</p>
+      {:else}
+        <div class="image-list">
+          {#each images as image (image.id)}
+            <ImageCard
+              {image}
+              selected={selectedNode?.entityType === 'image' && selectedNode.entityId === image.id}
+              onSelect={(imageId) => focusCanvasEntity('image', imageId)}
+              onSaveCaption={async (imageId, caption) => {
+                const chapterId = activeChapterId();
+                await ImageService.update(imageId, { caption });
+                if (chapterId) await loadChapter(chapterId);
+                await loadImageScope();
+              }}
+              onSaveNotes={async (imageId, notes) => {
+                const chapterId = activeChapterId();
+                await ImageService.update(imageId, { notes });
+                if (chapterId) await loadChapter(chapterId);
+                await loadImageScope();
+              }}
+              onDelete={async (imageId) => {
+                const chapterId = activeChapterId();
+                await ImageService.delete(imageId);
+                if (chapterId) await loadChapter(chapterId);
+                await loadImageScope();
+              }}
+            />
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section class="panel stack">
       <div class="section-row"><h2 class="workspace-title">Words</h2><span class="section-label">{wordState.words.length}</span></div>
       <div class="word-list">
         {#each wordState.words as word (word.id)}
@@ -373,14 +599,33 @@
   </aside>
 </main>
 
+<input
+  bind:this={imageInput}
+  type="file"
+  accept="image/*"
+  hidden
+  onchange={handleImageUpload}
+/>
+
+<ContextMenu
+  open={contextMenu.open}
+  x={contextMenu.x}
+  y={contextMenu.y}
+  title={contextMenuTitle}
+  items={contextMenuItems}
+  onSelect={handleContextAction}
+  onClose={closeContextMenu}
+/>
+
 <style>
   .paragraph-column {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     min-height: 100vh;
   }
 
   .paragraph-list,
+  .image-list,
   .word-list {
     display: grid;
     gap: 8px;

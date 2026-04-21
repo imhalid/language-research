@@ -1,4 +1,4 @@
-import type { Chapter, Paragraph, Word } from './domain.types';
+import type { Chapter, Image, Paragraph, Word } from './domain.types';
 
 export interface ChapterTreeNode extends Chapter {
   id: number;
@@ -38,4 +38,14 @@ export interface WordRecord extends Word {
   id: number;
   linkedParagraphCount: number;
   linkedSentenceCount: number;
+}
+
+export interface ImageRecord extends Image {
+  id: number;
+}
+
+export interface ContextMenuAction {
+  id: string;
+  label: string;
+  tone?: 'default' | 'danger';
 }

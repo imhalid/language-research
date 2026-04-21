@@ -40,8 +40,12 @@ export class ParagraphService {
       }));
   }
 
-  static async create(chapterId: number, content: string): Promise<number> {
-    const position = await getParagraphColumnPosition(chapterId);
+  static async create(
+    chapterId: number,
+    content: string,
+    position?: { x: number; y: number }
+  ): Promise<number> {
+    const nextPosition = position ?? (await getParagraphColumnPosition(chapterId));
 
     return db.transaction('rw', [db.paragraphs, db.canvasNodes], async () => {
       const paragraphId = await db.paragraphs.add(
@@ -55,8 +59,8 @@ export class ParagraphService {
       await db.canvasNodes.add({
         entityType: 'paragraph',
         entityId: paragraphId,
-        x: position.x,
-        y: position.y,
+        x: nextPosition.x,
+        y: nextPosition.y,
         chapterId
       });
 
@@ -76,11 +80,13 @@ export class ParagraphService {
         const paragraph = await db.paragraphs.get(paragraphId);
         const chapterId = paragraph?.chapterId ?? null;
         const sentenceIds = (await db.sentences.where('paragraphId').equals(paragraphId).primaryKeys()) as number[];
+        const imageIds = (await db.images.where('paragraphId').equals(paragraphId).primaryKeys()) as number[];
         const nodeIds = (await db.canvasNodes.toArray())
           .filter(
             (node) =>
               (node.entityType === 'paragraph' && node.entityId === paragraphId) ||
-              (node.entityType === 'sentence' && sentenceIds.includes(node.entityId))
+              (node.entityType === 'sentence' && sentenceIds.includes(node.entityId)) ||
+              (node.entityType === 'image' && imageIds.includes(node.entityId))
           )
           .flatMap((node) => (node.id ? [node.id] : []));
 

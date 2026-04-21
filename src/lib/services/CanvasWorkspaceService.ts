@@ -43,25 +43,37 @@ const resolveNodePresentation = async (
     }));
   }
 
+  if (entityType === 'image') {
+    const paragraphIds = (await db.paragraphs.where('chapterId').equals(chapterId).primaryKeys()) as number[];
+
+    if (paragraphIds.length === 0) return new Map();
+
+    return buildNodeMap(await db.images.where('paragraphId').anyOf(paragraphIds).toArray(), (entry) => ({
+      title: entry.caption || `Image ${entry.id}`,
+      subtitle: entry.notes || `paragraph ${entry.paragraphId}`
+    }));
+  }
+
   return new Map();
 };
 
 export class CanvasWorkspaceService {
   static async load(chapterId?: number): Promise<CanvasWorkspaceData> {
     const targetChapterId = chapterId ?? (await ensureResearchSeeded());
-    const [chapter, nodes, paragraphMap, sentenceMap, wordMap] = await Promise.all([
+    const [chapter, nodes, paragraphMap, sentenceMap, wordMap, imageMap] = await Promise.all([
       db.chapters.get(targetChapterId),
       db.canvasNodes.where('chapterId').equals(targetChapterId).toArray(),
       resolveNodePresentation(targetChapterId, 'paragraph'),
       resolveNodePresentation(targetChapterId, 'sentence'),
-      resolveNodePresentation(targetChapterId, 'word')
+      resolveNodePresentation(targetChapterId, 'word'),
+      resolveNodePresentation(targetChapterId, 'image')
     ]);
 
     const dictionary = {
       paragraph: paragraphMap,
       sentence: sentenceMap,
       word: wordMap,
-      image: new Map<number, { title: string; subtitle: string }>()
+      image: imageMap
     };
 
     return {
