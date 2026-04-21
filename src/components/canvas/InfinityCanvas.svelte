@@ -116,8 +116,8 @@
     onlostpointercapture={endPan}
     onwheel={zoomCanvas}
   >
+    <RopeOverlay {nodes} {connections} {view} />
     <div class="world" style={`transform: translate3d(${view.panX}px, ${view.panY}px, 0) scale(${view.zoom});`}>
-      <RopeOverlay {nodes} {connections} />
       {#each nodes as node (node.id)}
         <CanvasNode
           {node}
@@ -174,6 +174,7 @@
   .world {
     position: absolute;
     inset: 0;
+    z-index: 1;
     transform-origin: 0 0;
     will-change: transform;
   }

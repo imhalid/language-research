@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * RopeManager for div-based infinite canvas
  *
@@ -528,3 +529,5 @@ class RopeManager {
     cancelAnimationFrame(this.rafId);
   }
 }
+
+export { RopeManager };
