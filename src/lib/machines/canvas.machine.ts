@@ -1,5 +1,6 @@
 import { assign, setup } from 'xstate';
 import type { CanvasContext, CanvasEvent } from '../../types/machine.types';
+import { clampZoom } from '../utils/canvas';
 
 const initialContext = {
   zoom: 1,
@@ -9,8 +10,6 @@ const initialContext = {
   dragOffsetX: 0,
   dragOffsetY: 0
 } satisfies CanvasContext;
-
-const clampZoom = (value: number): number => Math.min(3, Math.max(0.25, value));
 
 export const canvasMachine = setup({
   types: {
