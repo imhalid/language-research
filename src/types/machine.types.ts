@@ -58,3 +58,10 @@ export type WordnetEvent =
   | { type: 'PROGRESS'; value: number }
   | { type: 'DONE' }
   | { type: 'ERROR'; message: string };
+
+export type WordnetWorkerCommand = { type: 'START' };
+
+export type WordnetWorkerMessage =
+  | { type: 'PROGRESS'; value: number }
+  | { type: 'DONE' }
+  | { type: 'ERROR'; message: string };

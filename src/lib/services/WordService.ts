@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { withTimestamps, withUpdatedAt } from '../utils/date';
+import { FlexSearchIndex } from './FlexSearchIndex';
 import { MorphologyEngine } from './MorphologyEngine';
 import type { Occurrence, Paragraph, Sentence, Word, WordnetEntry } from '../../types/domain.types';
 import type { WordRecord } from '../../types/research.types';
@@ -34,6 +35,14 @@ const resolveSentenceId = async (
     .first();
 
   return sentence?.id ?? null;
+};
+
+const buildLookupCandidates = (lemma: string): string[] => {
+  const raw = lemma.trim().toLowerCase().replace(/_/g, ' ');
+  const normalized = MorphologyEngine.normalizeToken(lemma);
+  const forms = normalized ? MorphologyEngine.getForms(normalized) : [];
+
+  return [...new Set([raw, normalized, ...forms].filter(Boolean))];
 };
 
 export class WordService {
@@ -82,7 +91,25 @@ export class WordService {
   }
 
   static async lookupWordnet(lemma: string): Promise<WordnetEntry | null> {
-    return (await db.wordnetCache.where('lemma').equals(MorphologyEngine.normalizeToken(lemma)).first()) ?? null;
+    const candidates = buildLookupCandidates(lemma);
+
+    if (candidates.length === 0) return null;
+
+    const exactMatches = await db.wordnetCache.where('lemma').anyOf(candidates).toArray();
+
+    if (exactMatches.length > 0) {
+      const entryMap = new Map(exactMatches.map((entry) => [entry.lemma, entry]));
+
+      for (const candidate of candidates) {
+        const match = entryMap.get(candidate);
+        if (match) return match;
+      }
+    }
+
+    const searchMatches = await FlexSearchIndex.search(lemma, 6);
+    const candidateSet = new Set(candidates);
+
+    return searchMatches.find((entry) => candidateSet.has(entry.lemma)) ?? searchMatches[0] ?? null;
   }
 
   static async listByChapter(chapterId: number): Promise<WordRecord[]> {

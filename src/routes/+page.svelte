@@ -5,14 +5,18 @@
   import ParagraphCard from '../components/paragraph/ParagraphCard.svelte';
   import Sidebar from '../components/sidebar/Sidebar.svelte';
   import WordCard from '../components/word/WordCard.svelte';
+  import WordnetCard from '../components/word/WordnetCard.svelte';
   import { canvasMachine } from '$lib/machines/canvas.machine';
   import { chapterMachine } from '$lib/machines/chapter.machine';
+  import { wordnetMachine } from '$lib/machines/wordnet.machine';
   import { CanvasWorkspaceService, type CanvasWorkspaceData } from '$lib/services/CanvasWorkspaceService';
   import { ChapterService } from '$lib/services/ChapterService';
   import { ParagraphService } from '$lib/services/ParagraphService';
   import { WordService } from '$lib/services/WordService';
+  import { WordnetBootstrapService } from '$lib/services/WordnetBootstrapService';
   import { wordStore } from '$lib/stores/word.store';
   import type { CanvasPoint } from '../types/canvas.types';
+  import type { WordnetEntry } from '../types/domain.types';
   import type {
     ChapterTreeNode,
     HighlightToken,
@@ -23,37 +27,60 @@
 
   const canvasActor = createActor(canvasMachine);
   const chapterActor = createActor(chapterMachine);
+  const wordnetActor = createActor(wordnetMachine);
 
   let view = canvasActor.getSnapshot().context;
   let chapterState = chapterActor.getSnapshot().context;
+  let wordnetState = wordnetActor.getSnapshot().context;
   let chapters: ChapterTreeNode[] = [];
   let workspace: CanvasWorkspaceData | null = null;
   let paragraphs: ParagraphRecord[] = [];
   let wordState = { words: [] as WordRecord[], selectedWordId: null as number | null, hoveredWordId: null as number | null };
+  let wordnetEntry: WordnetEntry | null = null;
+  let wordnetLoading = false;
   let highlightVersion = 0;
   let draftParagraph = '';
   let selectedNodeId: number | null = null;
   let loading = true;
   let error: string | null = null;
+  let wordnetLookupKey = '';
+  let wordnetLookupNonce = 0;
 
   $: selectedNode = workspace?.nodes.find((node) => node.id === selectedNodeId) ?? workspace?.nodes[0] ?? null;
   $: selectedWord = wordState.words.find((word) => word.id === wordState.selectedWordId) ?? null;
   $: hoveredWord = wordState.words.find((word) => word.id === wordState.hoveredWordId) ?? null;
+  $: {
+    const lookupKey = wordnetState.status === 'done' ? selectedWord?.lemma ?? '' : '';
+
+    if (!lookupKey) {
+      wordnetLookupKey = '';
+      wordnetEntry = null;
+      wordnetLoading = wordnetState.status === 'checking' || wordnetState.status === 'seeding';
+    } else if (lookupKey !== wordnetLookupKey) {
+      wordnetLookupKey = lookupKey;
+      void loadWordnetEntry(lookupKey);
+    }
+  }
 
   onMount(() => {
     canvasActor.start();
     chapterActor.start();
+    wordnetActor.start();
     const canvasSub = canvasActor.subscribe((snapshot) => (view = snapshot.context));
     const chapterSub = chapterActor.subscribe((snapshot) => (chapterState = snapshot.context));
+    const wordnetSub = wordnetActor.subscribe((snapshot) => (wordnetState = snapshot.context));
     const wordSub = wordStore.subscribe((state) => (wordState = state));
     void refresh();
+    void bootWordnet();
 
     return () => {
       canvasSub.unsubscribe();
       chapterSub.unsubscribe();
+      wordnetSub.unsubscribe();
       wordSub();
       canvasActor.stop();
       chapterActor.stop();
+      wordnetActor.stop();
     };
   });
 
@@ -65,6 +92,21 @@
   const loadWords = async (chapterId: number): Promise<void> => {
     const words = await WordService.listByChapter(chapterId);
     wordStore.setWords(words);
+  };
+  const bootWordnet = async (): Promise<void> => {
+    wordnetActor.send({ type: 'START_SEED' });
+
+    try {
+      await WordnetBootstrapService.ensureReady((value) => {
+        wordnetActor.send({ type: 'PROGRESS', value });
+      });
+      wordnetActor.send({ type: 'DONE' });
+    } catch (cause) {
+      wordnetActor.send({
+        type: 'ERROR',
+        message: cause instanceof Error ? cause.message : 'wordnet bootstrap failed'
+      });
+    }
   };
 
   const loadChapter = async (chapterId: number): Promise<CanvasWorkspaceData> => {
@@ -79,6 +121,18 @@
       : nextWorkspace.nodes[0]?.id ?? null;
     await loadWords(chapterId);
     return nextWorkspace;
+  };
+
+  const loadWordnetEntry = async (lemma: string): Promise<void> => {
+    const nonce = ++wordnetLookupNonce;
+    wordnetLoading = true;
+
+    try {
+      const entry = await WordService.lookupWordnet(lemma);
+      if (nonce === wordnetLookupNonce) wordnetEntry = entry;
+    } finally {
+      if (nonce === wordnetLookupNonce) wordnetLoading = false;
+    }
   };
 
   const refresh = async (preferredChapterId?: number): Promise<void> => {
@@ -111,8 +165,8 @@
 </script>
 
 <svelte:head>
-  <title>Language Research App | Faz 4</title>
-  <meta name="description" content="Word system, occurrence bridge, highlighted tokens, hover popover, and word cards." />
+  <title>Language Research App | Faz 5</title>
+  <meta name="description" content="WordNet worker seeding, FlexSearch rebuild, improved morphology, and local lookup previews." />
 </svelte:head>
 
 <main class="app-shell">
@@ -242,6 +296,15 @@
       </div>
       <p class="summary">{selectedWord ? `${selectedWord.lemma} selected. Linked paragraphs: ${selectedWord.linkedParagraphCount}.` : 'No word selected.'}</p>
     </section>
+
+    <WordnetCard
+      word={selectedWord}
+      status={wordnetState.status}
+      progress={wordnetState.progress}
+      error={wordnetState.error}
+      entry={wordnetEntry}
+      loading={wordnetLoading}
+    />
   </aside>
 </main>
 
