@@ -1,11 +1,14 @@
 <script lang="ts">
   import { clientToWorld, getZoomCompensation, wheelDeltaToZoom } from '../../lib/utils/canvas';
-  import type { CanvasPoint, CanvasWorkspaceNode, ViewState } from '../../types/canvas.types';
+  import type { CanvasPoint, CanvasWorkspaceNode, Connection, ViewState } from '../../types/canvas.types';
   import CanvasNode from './CanvasNode.svelte';
   import Minimap from './Minimap.svelte';
+  import RopeOverlay from './RopeOverlay.svelte';
 
   interface Props {
     nodes: CanvasWorkspaceNode[];
+    connections?: Connection[];
+    connectedNodeIds?: number[];
     view: ViewState;
     selectedNodeId?: number | null;
     onPan: (dx: number, dy: number) => void;
@@ -20,6 +23,8 @@
 
   let {
     nodes,
+    connections = [],
+    connectedNodeIds = [],
     view,
     selectedNodeId = null,
     onPan,
@@ -87,7 +92,7 @@
 <section class="panel canvas-panel">
   <div class="canvas-toolbar">
     <div class="canvas-meta">
-      <span class="section-label">Phase 2 Canvas</span>
+      <span class="section-label">Phase 6 Canvas</span>
       <span class="mono muted">{nodes.length} movable entities</span>
     </div>
     <div class="canvas-actions">
@@ -112,10 +117,12 @@
     onwheel={zoomCanvas}
   >
     <div class="world" style={`transform: translate3d(${view.panX}px, ${view.panY}px, 0) scale(${view.zoom});`}>
+      <RopeOverlay {nodes} {connections} />
       {#each nodes as node (node.id)}
         <CanvasNode
           {node}
           selected={selectedNodeId === node.id}
+          connected={connectedNodeIds.includes(node.id)}
           {toWorldPoint}
           onStart={onStartNode}
           onMove={onMoveNode}

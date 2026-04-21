@@ -8,6 +8,7 @@
   import WordnetCard from '../components/word/WordnetCard.svelte';
   import { canvasMachine } from '$lib/machines/canvas.machine';
   import { chapterMachine } from '$lib/machines/chapter.machine';
+  import { selectionMachine } from '$lib/machines/selection.machine';
   import { wordnetMachine } from '$lib/machines/wordnet.machine';
   import { CanvasWorkspaceService, type CanvasWorkspaceData } from '$lib/services/CanvasWorkspaceService';
   import { ChapterService } from '$lib/services/ChapterService';
@@ -15,8 +16,14 @@
   import { WordService } from '$lib/services/WordService';
   import { WordnetBootstrapService } from '$lib/services/WordnetBootstrapService';
   import { wordStore } from '$lib/stores/word.store';
-  import type { CanvasPoint } from '../types/canvas.types';
+  import {
+    buildSelectionConnections,
+    buildSelectionKey,
+    findCanvasNodeId
+  } from '$lib/utils/canvasSelection';
+  import type { CanvasPoint, Connection } from '../types/canvas.types';
   import type { WordnetEntry } from '../types/domain.types';
+  import type { SelectableEntityType } from '../types/machine.types';
   import type {
     ChapterTreeNode,
     HighlightToken,
@@ -27,10 +34,12 @@
 
   const canvasActor = createActor(canvasMachine);
   const chapterActor = createActor(chapterMachine);
+  const selectionActor = createActor(selectionMachine);
   const wordnetActor = createActor(wordnetMachine);
 
   let view = canvasActor.getSnapshot().context;
   let chapterState = chapterActor.getSnapshot().context;
+  let selectionState = selectionActor.getSnapshot().context;
   let wordnetState = wordnetActor.getSnapshot().context;
   let chapters: ChapterTreeNode[] = [];
   let workspace: CanvasWorkspaceData | null = null;
@@ -43,12 +52,38 @@
   let selectedNodeId: number | null = null;
   let loading = true;
   let error: string | null = null;
+  let connections: Connection[] = [];
+  let connectedNodeIds: number[] = [];
+  let selectionKey = '';
   let wordnetLookupKey = '';
   let wordnetLookupNonce = 0;
 
   $: selectedNode = workspace?.nodes.find((node) => node.id === selectedNodeId) ?? workspace?.nodes[0] ?? null;
+  $: connections = buildSelectionConnections(
+    workspace?.nodes ?? [],
+    selectedNode?.id ?? null,
+    selectionState.connectedIds
+  );
+  $: connectedNodeIds = connections.map((connection) => connection.toNodeId);
   $: selectedWord = wordState.words.find((word) => word.id === wordState.selectedWordId) ?? null;
   $: hoveredWord = wordState.words.find((word) => word.id === wordState.hoveredWordId) ?? null;
+  $: {
+    const nextKey = buildSelectionKey(workspace?.chapterId, selectedNode);
+
+    if (!nextKey) {
+      if (selectionKey) {
+        selectionKey = '';
+        selectionActor.send({ type: 'DESELECT' });
+      }
+    } else if (nextKey !== selectionKey && selectedNode) {
+      selectionKey = nextKey;
+      selectionActor.send({
+        type: 'SELECT',
+        entityType: selectedNode.entityType as SelectableEntityType,
+        id: selectedNode.entityId
+      });
+    }
+  }
   $: {
     const lookupKey = wordnetState.status === 'done' ? selectedWord?.lemma ?? '' : '';
 
@@ -65,9 +100,11 @@
   onMount(() => {
     canvasActor.start();
     chapterActor.start();
+    selectionActor.start();
     wordnetActor.start();
     const canvasSub = canvasActor.subscribe((snapshot) => (view = snapshot.context));
     const chapterSub = chapterActor.subscribe((snapshot) => (chapterState = snapshot.context));
+    const selectionSub = selectionActor.subscribe((snapshot) => (selectionState = snapshot.context));
     const wordnetSub = wordnetActor.subscribe((snapshot) => (wordnetState = snapshot.context));
     const wordSub = wordStore.subscribe((state) => (wordState = state));
     void refresh();
@@ -76,10 +113,12 @@
     return () => {
       canvasSub.unsubscribe();
       chapterSub.unsubscribe();
+      selectionSub.unsubscribe();
       wordnetSub.unsubscribe();
       wordSub();
       canvasActor.stop();
       chapterActor.stop();
+      selectionActor.stop();
       wordnetActor.stop();
     };
   });
@@ -92,6 +131,18 @@
   const loadWords = async (chapterId: number): Promise<void> => {
     const words = await WordService.listByChapter(chapterId);
     wordStore.setWords(words);
+  };
+  const focusCanvasEntity = (
+    entityType: SelectableEntityType,
+    entityId: number,
+    nodes = workspace?.nodes ?? []
+  ): void => {
+    const nodeId = findCanvasNodeId(nodes, entityType, entityId);
+    if (nodeId != null) selectedNodeId = nodeId;
+  };
+  const syncWordStoreFromNode = (nodeId: number, nodes = workspace?.nodes ?? []): void => {
+    const node = nodes.find((entry) => entry.id === nodeId);
+    if (node?.entityType === 'word') wordStore.selectWord(node.entityId);
   };
   const bootWordnet = async (): Promise<void> => {
     wordnetActor.send({ type: 'START_SEED' });
@@ -159,14 +210,14 @@
   };
 
   const refreshWordSurface = async (chapterId: number): Promise<void> => {
-    await Promise.all([loadChapter(chapterId), loadWords(chapterId)]);
+    await loadChapter(chapterId);
     highlightVersion += 1;
   };
 </script>
 
 <svelte:head>
-  <title>Language Research App | Faz 5</title>
-  <meta name="description" content="WordNet worker seeding, FlexSearch rebuild, improved morphology, and local lookup previews." />
+  <title>Language Research App | Faz 6</title>
+  <meta name="description" content="Selection graph, rope overlay, connected canvas nodes, and local WordNet previews." />
 </svelte:head>
 
 <main class="app-shell">
@@ -189,12 +240,15 @@
     {:else}
       <InfinityCanvas
         nodes={workspace.nodes}
+        {connections}
+        {connectedNodeIds}
         view={view}
         {selectedNodeId}
         onPan={(dx, dy) => canvasActor.send({ type: 'PAN', dx, dy })}
         onZoom={handleZoom}
         onStartNode={(nodeId, offsetX, offsetY) => {
           selectedNodeId = nodeId;
+          syncWordStoreFromNode(nodeId);
           canvasActor.send({ type: 'DRAG_START', nodeId, offsetX, offsetY });
         }}
         onMoveNode={(nodeId, x, y) => {
@@ -208,7 +262,10 @@
         }}
         onCommitNode={async (nodeId, x, y) => CanvasWorkspaceService.updateNodePosition(nodeId, x, y)}
         onEndNode={() => canvasActor.send({ type: 'DRAG_END' })}
-        onSelectNode={(nodeId) => (selectedNodeId = nodeId)}
+        onSelectNode={(nodeId) => {
+          selectedNodeId = nodeId;
+          syncWordStoreFromNode(nodeId);
+        }}
         onResetView={() => canvasActor.send({ type: 'RESET_VIEW' })}
       />
     {/if}
@@ -263,10 +320,15 @@
               endOffset: token.endOffset
             });
             wordStore.selectWord(wordId);
-            await refreshWordSurface(chapterId);
+            const nextWorkspace = await loadChapter(chapterId);
+            highlightVersion += 1;
+            focusCanvasEntity('word', wordId, nextWorkspace.nodes);
           }}
           onHoverWord={(wordId) => wordStore.hoverWord(wordId)}
-          onSelectWord={(wordId) => wordStore.selectWord(wordId)}
+          onSelectWord={(wordId) => {
+            wordStore.selectWord(wordId);
+            if (wordId != null) focusCanvasEntity('word', wordId);
+          }}
         />
       {/each}
     </div>
@@ -278,7 +340,10 @@
           <WordCard
             {word}
             selected={word.id === wordState.selectedWordId}
-            onSelect={(wordId) => wordStore.selectWord(wordId)}
+            onSelect={(wordId) => {
+              wordStore.selectWord(wordId);
+              focusCanvasEntity('word', wordId);
+            }}
             onSaveTranslation={async (wordId, translation) => {
               const chapterId = activeChapterId();
               await WordService.annotate(wordId, { translation });

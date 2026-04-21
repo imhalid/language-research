@@ -5,6 +5,7 @@
   interface Props {
     node: CanvasWorkspaceNode;
     selected?: boolean;
+    connected?: boolean;
     toWorldPoint: (clientX: number, clientY: number) => CanvasPoint;
     onStart: (nodeId: number, offsetX: number, offsetY: number) => void;
     onMove: (nodeId: number, x: number, y: number) => void;
@@ -13,7 +14,7 @@
     onSelect: (nodeId: number) => void;
   }
 
-  let { node, selected = false, toWorldPoint, onStart, onMove, onCommit, onEnd, onSelect }: Props =
+  let { node, selected = false, connected = false, toWorldPoint, onStart, onMove, onCommit, onEnd, onSelect }: Props =
     $props();
 
   let element: HTMLButtonElement | null = null;
@@ -63,6 +64,7 @@
   class="node"
   data-entity={node.entityType}
   data-selected={selected}
+  data-connected={connected}
   aria-pressed={selected}
   style={`transform: translate3d(${node.x}px, ${node.y}px, 0); width: ${NODE_WIDTH}px; min-height: ${NODE_HEIGHT}px;`}
   onpointerdown={startDrag}
@@ -92,6 +94,10 @@
 
   .node[data-selected='true'] {
     border-color: var(--color-border-active);
+  }
+
+  .node[data-connected='true'] {
+    border-color: color-mix(in oklch, var(--color-rope) 55%, var(--color-border));
   }
 
   .node[data-entity='paragraph'] {
