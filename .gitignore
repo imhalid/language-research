@@ -1,0 +1,9 @@
+node_modules
+.svelte-kit
+.vercel
+build
+dist
+.codex
+
+.DS_Store
+Thumbs.db
