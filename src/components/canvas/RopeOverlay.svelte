@@ -82,7 +82,7 @@
     const init = async (): Promise<void> => {
       if (!canvas) return;
 
-      const module = (await import('../../../rope-manager.js')) as {
+      const module = (await import('./rope-manager.js')) as {
         RopeManager: new (options: {
           canvas: HTMLCanvasElement;
           getCamera: () => { x: number; y: number; zoom: number };
