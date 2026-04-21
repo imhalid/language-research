@@ -1,112 +1,105 @@
 <script lang="ts">
-  const phases = [
-    'Faz 1: Dexie schema, type sistemi, machine iskeletleri, design tokens',
-    'Faz 2: Infinite canvas ve node altyapisi',
-    'Faz 3: Chapter ve paragraph CRUD',
-    'Faz 4: Kelime sistemi ve highlight akisi',
-    'Faz 5: WordNet worker, FlexSearch, morphology',
-    'Faz 6: Rope overlay ve baglanti gorsellestirmesi',
-    'Faz 7: Yardimci araclar, image upload, settings persistence'
-  ];
+  const tables = ['chapters', 'paragraphs', 'sentences', 'words', 'occurrences', 'canvasNodes'];
+  const machines = ['canvas.machine', 'chapter.machine', 'selection.machine', 'wordnet.machine'];
+  const tokens = ['oklch palette', 'compact spacing', 'mono labels', '24px canvas grid'];
 </script>
 
 <svelte:head>
   <title>Language Research App</title>
   <meta
     name="description"
-    content="Local-first language research workspace scaffolded with SvelteKit, Svelte 5, Dexie, XState and FlexSearch."
+    content="Local-first language research workspace with Phase 1 data layer, machine skeletons and compact TUI design system."
   />
 </svelte:head>
 
-<main class="shell">
-  <section class="panel">
-    <p class="eyebrow">Language Research App</p>
-    <h1>Faz 0 basladi</h1>
-    <p class="summary">
-      Proje iskeleti kuruldu. SvelteKit tabani hazir. Sonraki adim temel altyapi dosyalari.
-    </p>
-
-    <div class="meta">
-      <div>
-        <span class="label">Stack</span>
-        <strong>SvelteKit + Svelte 5 + TypeScript + Vite</strong>
+<main class="app-shell">
+  <aside class="sidebar">
+    <section class="panel stack">
+      <div class="title-row">
+        <div>
+          <div class="eyebrow muted">Language Research App</div>
+          <h1>Faz 1</h1>
+        </div>
+        <div class="status-pill"><span class="status-dot live"></span> active</div>
       </div>
-      <div>
-        <span class="label">Hazir asset</span>
-        <strong>`/static/wordnet.json`, `src/types/wordnet.types.ts`</strong>
-      </div>
-    </div>
+      <p class="summary">Dexie schema, machine skeletons, compact TUI shell.</p>
+    </section>
 
-    <ol>
-      {#each phases as phase}
-        <li>{phase}</li>
-      {/each}
-    </ol>
+    <section class="panel">
+      <div class="section-row">
+        <h2 class="workspace-title">IndexedDB v1</h2>
+        <span class="section-label">schema</span>
+      </div>
+      <ul class="terminal-list">
+        {#each tables as table}
+          <li><span>{table}</span><span class="list-meta">ready</span></li>
+        {/each}
+      </ul>
+    </section>
+  </aside>
+
+  <section class="workspace">
+    <section class="panel workspace-header">
+      <div class="workspace-meta">
+        <span class="section-label">workspace</span>
+        <span class="mono muted">wordnet.json local / 96MB</span>
+      </div>
+      <div class="metric-grid">
+        <article class="metric"><span class="section-label">stack</span><strong>SvelteKit</strong></article>
+        <article class="metric"><span class="section-label">state</span><strong>XState v5</strong></article>
+        <article class="metric"><span class="section-label">storage</span><strong>Dexie</strong></article>
+      </div>
+    </section>
+
+    <section class="workspace-grid">
+      <section class="panel canvas-stage canvas-grid">
+        <div class="stage-copy">
+          <div class="section-row">
+            <h2 class="workspace-title">Canvas shell</h2>
+            <span class="section-label">phase 2 target</span>
+          </div>
+          <p>Grid, spacing, muted palette, flat panel system ready for node canvas work.</p>
+          <div class="tag-row">
+            {#each tokens as token}
+              <span class="tag">{token}</span>
+            {/each}
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-row">
+          <h2 class="workspace-title">State actors</h2>
+          <span class="section-label">skeleton</span>
+        </div>
+        <ul class="terminal-list">
+          {#each machines as machine}
+            <li><span>{machine}</span><span class="list-meta">bootstrapped</span></li>
+          {/each}
+        </ul>
+      </section>
+    </section>
   </section>
+
+  <aside class="inspector">
+    <section class="panel">
+      <div class="section-row">
+        <h2 class="workspace-title">Next</h2>
+        <span class="section-label">faz 2</span>
+      </div>
+      <ol class="timeline">
+        <li><span>Infinity canvas</span><span class="list-meta">pending</span></li>
+        <li><span>Drag persistence</span><span class="list-meta">pending</span></li>
+        <li><span>Minimap</span><span class="list-meta">pending</span></li>
+      </ol>
+    </section>
+
+    <section class="panel stack">
+      <div class="section-row">
+        <h3 class="workspace-title">Assets</h3>
+        <span class="section-label">loaded</span>
+      </div>
+      <p class="summary">`static/wordnet.json`, `src/types/wordnet.types.ts`, `rope-manager.js`</p>
+    </section>
+  </aside>
 </main>
-
-<style>
-  .shell {
-    display: grid;
-    min-height: 100vh;
-    place-items: center;
-    padding: 24px;
-    background:
-      radial-gradient(circle at top, rgba(86, 146, 255, 0.18), transparent 35%),
-      linear-gradient(180deg, #131823 0%, #0f1217 100%);
-  }
-
-  .panel {
-    width: min(760px, 100%);
-    padding: 32px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 24px;
-    background: rgba(12, 16, 24, 0.88);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
-  }
-
-  .eyebrow,
-  .label {
-    margin: 0 0 8px;
-    color: #86b1ff;
-    font-size: 0.8rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  h1 {
-    margin: 0 0 12px;
-    font-size: clamp(2rem, 6vw, 3.5rem);
-    line-height: 1;
-  }
-
-  .summary {
-    margin: 0 0 24px;
-    max-width: 56ch;
-    color: rgba(243, 245, 247, 0.82);
-  }
-
-  .meta {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 24px;
-    padding: 16px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .meta strong {
-    display: block;
-    font-size: 1rem;
-  }
-
-  ol {
-    margin: 0;
-    padding-left: 1.2rem;
-    color: rgba(243, 245, 247, 0.82);
-  }
-
-  li + li {
-    margin-top: 10px;
-  }
-</style>

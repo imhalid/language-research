@@ -1,27 +1,318 @@
-:root {
-  color-scheme: dark;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
-  background: #0f1217;
-  color: #f3f5f7;
+@layer base {
+  :root {
+    color-scheme: dark;
+    --color-bg: oklch(12% 0.01 260);
+    --color-surface: oklch(17% 0.015 260);
+    --color-border: oklch(28% 0.02 260);
+    --color-text: oklch(85% 0.01 260);
+    --color-accent: oklch(70% 0.15 200);
+    --color-surface-hover: color-mix(in oklch, var(--color-surface) 80%, var(--color-accent));
+    --color-border-active: color-mix(in oklch, var(--color-border) 50%, var(--color-accent));
+    --color-text-muted: color-mix(in oklch, var(--color-text) 50%, var(--color-bg));
+    --color-highlight: oklch(75% 0.18 85 / 0.25);
+    --color-highlight-hover: oklch(75% 0.18 85 / 0.45);
+    --color-rope: oklch(60% 0.08 200 / 0.6);
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+    --font-size-sm: 11px;
+    --font-size-base: 13px;
+    --font-size-lg: 15px;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  body {
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    line-height: 1.4;
+    text-rendering: optimizeLegibility;
+  }
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-}
-
-body {
-  min-height: 100vh;
 }
 
 button,
 input,
 textarea,
 select {
+  color: inherit;
   font: inherit;
+}
+
+button,
+input,
+textarea,
+select,
+.panel {
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-surface);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+.panel:focus-within {
+  outline: none;
+  border-color: var(--color-border-active);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: var(--color-highlight);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 18rem minmax(0, 1fr) 20rem;
+  min-height: 100vh;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.panel {
+  min-width: 0;
+  padding: var(--space-3);
+  animation: panel-enter 180ms ease-out both;
+}
+
+.sidebar,
+.inspector {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.workspace {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.workspace-header,
+.workspace-grid,
+.stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.workspace-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+}
+
+.canvas-stage {
+  position: relative;
+  min-height: 24rem;
+  overflow: hidden;
+}
+
+.canvas-grid {
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+}
+
+.eyebrow,
+.section-label,
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-label,
+.muted,
+.list-meta {
+  color: var(--color-text-muted);
+}
+
+.title-row,
+.section-row,
+.metric-row,
+.workspace-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.title-row h1,
+.section-row h2,
+.section-row h3,
+.panel-title,
+.workspace-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.workspace-title {
+  font-size: 1rem;
+}
+
+.title-row h1 {
+  font-size: 1.4rem;
+  font-family: var(--font-mono);
+}
+
+.summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  max-width: 44ch;
+}
+
+.terminal-list,
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.terminal-list li,
+.timeline li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-top: 1px solid color-mix(in oklch, var(--color-border) 80%, transparent);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.terminal-list li:first-child,
+.timeline li:first-child {
+  border-top: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.status-dot.live {
+  background: var(--color-accent);
+  animation: pulse 1.4s linear infinite;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.metric {
+  padding: var(--space-2);
+  border: 1px solid color-mix(in oklch, var(--color-border) 82%, transparent);
+  font-family: var(--font-mono);
+}
+
+.metric strong {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 1.1rem;
+}
+
+.stage-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-2);
+  width: min(28rem, 100%);
+  padding: var(--space-4);
+  margin: var(--space-4);
+  background: color-mix(in oklch, var(--color-bg) 72%, transparent);
+  border: 1px solid var(--color-border);
+}
+
+.stage-copy p {
+  margin: 0;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.tag {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-grid,
+  .metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .canvas-stage {
+    min-height: 18rem;
+  }
 }
